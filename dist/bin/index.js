@@ -9,7 +9,8 @@ program
   .description(
     "Escaneia um diretório de páginas Next.js e extrai chaves next-intl"
   )
-  .argument("<dir>", "Diretório com páginas (ex: pages/)")
+  .argument("<dir>", "Diretório com principal")
+  .option("-t, --tsconfig <tsconfig>", "Caminho para o root do tsconfig")
   .option("-o, --output <dir>", "Diretório de saída para JSONs", "intl-pages")
   .action(async (dir, options) => {
     const absoluteDir = path.resolve(dir);
@@ -18,7 +19,10 @@ program
       fs.rmSync(outputDir, { recursive: true, force: true });
     }
     fs.mkdirSync(outputDir, { recursive: true });
-    const result = await scanAllPagesInDir(absoluteDir);
+    const tsconfigPath = options.tsconfig
+      ? path.resolve(options.tsconfig)
+      : undefined;
+    const result = await scanAllPagesInDir(absoluteDir, tsconfigPath);
     fs.writeFileSync(
       path.join(outputDir, "all-keys.json"),
       JSON.stringify(

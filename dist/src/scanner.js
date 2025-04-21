@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import parser from "@babel/parser";
 import traverse from "@babel/traverse";
+import { isBinaryExpression, isConditionalExpression, isStringLiteral, isTemplateLiteral, } from "@babel/types";
 import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default;
@@ -17,7 +18,9 @@ function loadAliasFromTSConfig(projectRoot) {
         for (const [aliasPattern, paths] of Object.entries(config.options.paths)) {
             const cleanPattern = aliasPattern.replace(/\*$/, "");
             const target = paths[0].replace(/\*$/, "");
-            aliasMap[cleanPattern] = path.resolve(config.options.baseUrl || ".", target);
+            if (cleanPattern === "@prisma/generated/")
+                continue;
+            aliasMap[cleanPattern] = path.resolve(config.options.baseUrl || projectRoot, target);
         }
     }
 }
@@ -27,7 +30,7 @@ function resolveWithAlias(importPath, baseDir) {
     }
     for (const alias in aliasMap) {
         if (importPath.startsWith(alias)) {
-            const relativePath = importPath.replace(alias, aliasMap[alias]);
+            const relativePath = importPath.replace(alias, aliasMap[alias] + "/");
             return resolveImportPath(relativePath, baseDir);
         }
     }
@@ -57,7 +60,7 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
     transverseDefault(ast, {
         ImportDeclaration(path) {
             const importPath = path.node.source.value;
-            if (!importPath.startsWith("."))
+            if (!importPath.startsWith(".") && !importPath.startsWith("@"))
                 return;
             const resolved = resolveWithAlias(importPath, dirname);
             if (resolved)
@@ -84,9 +87,7 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
             }
             // chamada t(...)
             const args = path.node.arguments;
-            if (callee.isIdentifier() &&
-                callee.node.name === "t" &&
-                args.length > 0) {
+            if (isTranslationCall(path)) {
                 const firstArg = args[0];
                 if (firstArg?.type === "StringLiteral") {
                     foundKeys.add(firstArg.value);
@@ -98,34 +99,17 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
                     const fileInfo = location
                         ? ` (${filename}:${location.start.line})`
                         : ` (${filename})`;
-                    let namespaceGuess = null;
-                    if (firstArg.type === "TemplateLiteral") {
-                        const firstQuasi = firstArg.quasis[0]?.value.raw;
-                        if (firstQuasi && firstQuasi.endsWith(".")) {
-                            namespaceGuess = firstQuasi.slice(0, -1);
-                            namespaces.add(namespaceGuess);
-                        }
-                    }
-                    else if (firstArg.type === "BinaryExpression") {
-                        const { left, right } = firstArg;
-                        if (left.type === "StringLiteral" && left.value.endsWith(".")) {
-                            namespaceGuess = left.value.slice(0, -1);
-                            namespaces.add(namespaceGuess);
-                        }
-                    }
-                    // console.log(`⚠️  Chave dinâmica encontrada em${fileInfo}`);
-                    // const codeSnippet = code.slice(firstArg.start!, firstArg.end!);
-                    // console.log(`   → Expressão: ${codeSnippet}`);
-                    // if (namespaceGuess) {
-                    //   console.log(`   → Namespace inferido: "${namespaceGuess}"`);
-                    // }
-                    if (!namespaceGuess) {
+                    let namespaceGuess = tryExtractNamespaceFromDynamic(firstArg);
+                    if (!namespaceGuess.length) {
                         const codeSnippet = code.slice(firstArg.start, firstArg.end);
                         console.log(`⚠️  Chave dinâmica Impossível encontrada em${fileInfo}`);
                         console.log(`   → Expressão: ${codeSnippet}`);
                         foundKeys.add("[IMPOSSIBLE_DYNAMIC_KEY]");
                     }
                     else {
+                        for (const ns of namespaceGuess) {
+                            namespaces.add(ns);
+                        }
                         foundKeys.add("[DYNAMIC_KEY]");
                     }
                 }
@@ -168,8 +152,8 @@ function findPages(dir) {
     }
     return files;
 }
-export async function scanAllPagesInDir(dir) {
-    loadAliasFromTSConfig(dir);
+export async function scanAllPagesInDir(dir, tsConfig) {
+    tsConfig && loadAliasFromTSConfig(tsConfig);
     const pageFiles = findPages(dir);
     const perPage = {};
     const allKeys = new Set();
@@ -198,4 +182,48 @@ export async function scanAllPagesInDir(dir) {
         allNamespaces: Array.from(allNamespaces),
         perPage,
     };
+}
+export function isTranslationCall(path) {
+    const callee = path.get("callee");
+    const args = path.node.arguments;
+    if (!args.length)
+        return false;
+    if (callee.isIdentifier() && callee.node.name === "t") {
+        return true;
+    }
+    if (callee.isMemberExpression()) {
+        const object = callee.get("object");
+        if (object.isIdentifier() && object.node.name === "t") {
+            return true;
+        }
+    }
+    return false;
+}
+function tryExtractNamespaceFromDynamic(node) {
+    if (!node)
+        return [];
+    // Case 1: Template literal - `namespace.${key}`
+    if (isTemplateLiteral(node)) {
+        const first = node.quasis[0]?.value.raw;
+        if (first) {
+            const namespace = first.split(".")[0];
+            if (namespace)
+                return [namespace];
+        }
+    }
+    // Case 2: Binary expression - "namespace." + key
+    if (isBinaryExpression(node) && isStringLiteral(node.left)) {
+        const match = node.left.value.split(".");
+        if (match)
+            return [match[0]];
+    }
+    // Case 3: Ternary operator - condition ? "ns1.key" : "ns2.key"
+    if (isConditionalExpression(node)) {
+        const options = [node.consequent, node.alternate];
+        return (options
+            //@ts-ignore
+            .filter(isStringLiteral)
+            .map((lit) => lit.value.split(".")[0]));
+    }
+    return [];
 }

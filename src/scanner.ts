@@ -2,7 +2,17 @@ import fs from "fs";
 import path from "path";
 import parser from "@babel/parser";
 import traverse, { NodePath } from "@babel/traverse";
-import { CallExpression, File } from "@babel/types";
+import {
+  ArgumentPlaceholder,
+  CallExpression,
+  Expression,
+  File,
+  isBinaryExpression,
+  isConditionalExpression,
+  isStringLiteral,
+  isTemplateLiteral,
+  SpreadElement,
+} from "@babel/types";
 
 import ts from "typescript";
 
@@ -29,8 +39,11 @@ function loadAliasFromTSConfig(projectRoot: string) {
     for (const [aliasPattern, paths] of Object.entries(config.options.paths)) {
       const cleanPattern = aliasPattern.replace(/\*$/, "");
       const target = paths[0].replace(/\*$/, "");
+
+      if (cleanPattern === "@prisma/generated/") continue;
+
       aliasMap[cleanPattern] = path.resolve(
-        config.options.baseUrl || ".",
+        config.options.baseUrl || projectRoot,
         target
       );
     }
@@ -44,7 +57,7 @@ function resolveWithAlias(importPath: string, baseDir: string): string | null {
 
   for (const alias in aliasMap) {
     if (importPath.startsWith(alias)) {
-      const relativePath = importPath.replace(alias, aliasMap[alias]);
+      const relativePath = importPath.replace(alias, aliasMap[alias] + "/");
       return resolveImportPath(relativePath, baseDir);
     }
   }
@@ -91,8 +104,7 @@ function extractTCalls(
   transverseDefault(ast, {
     ImportDeclaration(path) {
       const importPath = path.node.source.value;
-      if (!importPath.startsWith(".")) return;
-
+      if (!importPath.startsWith(".") && !importPath.startsWith("@")) return;
       const resolved = resolveWithAlias(importPath, dirname);
       if (resolved) importedFiles.push(resolved);
     },
@@ -137,31 +149,11 @@ function extractTCalls(
             ? ` (${filename}:${location.start.line})`
             : ` (${filename})`;
 
-          let namespaceGuess: string | null = null;
+          let namespaceGuess: string[] = tryExtractNamespaceFromDynamic(
+            firstArg as Expression | SpreadElement | ArgumentPlaceholder
+          );
 
-          if (firstArg.type === "TemplateLiteral") {
-            const firstQuasi = firstArg.quasis[0]?.value.raw;
-            if (firstQuasi && firstQuasi.endsWith(".")) {
-              namespaceGuess = firstQuasi.slice(0, -1) as string;
-              namespaces.add(namespaceGuess);
-            }
-          } else if (firstArg.type === "BinaryExpression") {
-            const { left, right } = firstArg;
-
-            if (left.type === "StringLiteral" && left.value.endsWith(".")) {
-              namespaceGuess = left.value.slice(0, -1) as string;
-              namespaces.add(namespaceGuess);
-            }
-          }
-
-          // console.log(`⚠️  Chave dinâmica encontrada em${fileInfo}`);
-          // const codeSnippet = code.slice(firstArg.start!, firstArg.end!);
-          // console.log(`   → Expressão: ${codeSnippet}`);
-          // if (namespaceGuess) {
-          //   console.log(`   → Namespace inferido: "${namespaceGuess}"`);
-          // }
-
-          if (!namespaceGuess) {
+          if (!namespaceGuess.length) {
             const codeSnippet = code.slice(firstArg.start!, firstArg.end!);
             console.log(
               `⚠️  Chave dinâmica Impossível encontrada em${fileInfo}`
@@ -169,6 +161,9 @@ function extractTCalls(
             console.log(`   → Expressão: ${codeSnippet}`);
             foundKeys.add("[IMPOSSIBLE_DYNAMIC_KEY]");
           } else {
+            for (const ns of namespaceGuess) {
+              namespaces.add(ns);
+            }
             foundKeys.add("[DYNAMIC_KEY]");
           }
         }
@@ -224,12 +219,15 @@ function findPages(dir: string): string[] {
   return files;
 }
 
-export async function scanAllPagesInDir(dir: string): Promise<{
+export async function scanAllPagesInDir(
+  dir: string,
+  tsConfig?: string
+): Promise<{
   allKeys: string[];
   allNamespaces: string[];
   perPage: Record<string, ScanResult>;
 }> {
-  loadAliasFromTSConfig(dir);
+  tsConfig && loadAliasFromTSConfig(tsConfig);
   const pageFiles = findPages(dir);
   const perPage: Record<string, ScanResult> = {};
   const allKeys = new Set<string>();
@@ -291,4 +289,36 @@ export function isTranslationCall(path: NodePath<CallExpression>): boolean {
   }
 
   return false;
+}
+
+function tryExtractNamespaceFromDynamic(node: any): string[] {
+  if (!node) return [];
+
+  // Case 1: Template literal - `namespace.${key}`
+  if (isTemplateLiteral(node)) {
+    const first = node.quasis[0]?.value.raw;
+    if (first) {
+      const namespace = first.split(".")[0];
+      if (namespace) return [namespace];
+    }
+  }
+
+  // Case 2: Binary expression - "namespace." + key
+  if (isBinaryExpression(node) && isStringLiteral(node.left)) {
+    const match = node.left.value.split(".");
+    if (match) return [match[0]];
+  }
+
+  // Case 3: Ternary operator - condition ? "ns1.key" : "ns2.key"
+  if (isConditionalExpression(node)) {
+    const options = [node.consequent, node.alternate];
+    return (
+      options
+        //@ts-ignore
+        .filter(isStringLiteral)
+        .map((lit) => lit.value.split(".")[0])
+    );
+  }
+
+  return [];
 }
