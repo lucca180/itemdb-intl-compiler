@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import parser from "@babel/parser";
-import traverse from "@babel/traverse";
-import { File } from "@babel/types";
+import traverse, { NodePath } from "@babel/traverse";
+import { CallExpression, File } from "@babel/types";
 
 import ts from "typescript";
 
@@ -124,11 +124,7 @@ function extractTCalls(
 
       // chamada t(...)
       const args = path.node.arguments;
-      if (
-        callee.isIdentifier() &&
-        callee.node.name === "t" &&
-        args.length > 0
-      ) {
+      if (isTranslationCall(path)) {
         const firstArg = args[0];
 
         if (firstArg?.type === "StringLiteral") {
@@ -275,4 +271,24 @@ export async function scanAllPagesInDir(dir: string): Promise<{
     allNamespaces: Array.from(allNamespaces),
     perPage,
   };
+}
+
+export function isTranslationCall(path: NodePath<CallExpression>): boolean {
+  const callee = path.get("callee");
+  const args = path.node.arguments;
+
+  if (!args.length) return false;
+
+  if (callee.isIdentifier() && callee.node.name === "t") {
+    return true;
+  }
+
+  if (callee.isMemberExpression()) {
+    const object = callee.get("object");
+    if (object.isIdentifier() && object.node.name === "t") {
+      return true;
+    }
+  }
+
+  return false;
 }
