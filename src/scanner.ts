@@ -176,6 +176,12 @@ function extractTCalls(
   });
 }
 
+// Cache global para armazenar resultados de arquivos já processados
+const fileCache = new Map<
+  string,
+  { keys: Set<string>; namespaces: Set<string>; importedFiles: string[] }
+>();
+
 async function scanFileRecursive(
   entry: string,
   visited: Set<string>,
@@ -186,10 +192,39 @@ async function scanFileRecursive(
   if (visited.has(resolved)) return;
   visited.add(resolved);
 
+  // Verifica se o arquivo já foi processado globalmente
+  if (fileCache.has(resolved)) {
+    const cached = fileCache.get(resolved)!;
+    // Adiciona os resultados do cache ao resultado final
+    cached.keys.forEach((key) => foundKeys.add(key));
+    cached.namespaces.forEach((ns) => namespaces.add(ns));
+
+    // Continua processando os arquivos importados se ainda não foram visitados nesta branch
+    const promises: Promise<void>[] = [];
+    for (const imp of cached.importedFiles) {
+      promises.push(scanFileRecursive(imp, visited, foundKeys, namespaces));
+    }
+    await Promise.all(promises);
+    return;
+  }
+
   const code = await readFile(resolved, "utf-8");
   const importedFiles: string[] = [];
+  const fileKeys = new Set<string>();
+  const fileNamespaces = new Set<string>();
 
-  extractTCalls(code, resolved, foundKeys, namespaces, importedFiles);
+  extractTCalls(code, resolved, fileKeys, fileNamespaces, importedFiles);
+
+  // Armazena no cache global
+  fileCache.set(resolved, {
+    keys: fileKeys,
+    namespaces: fileNamespaces,
+    importedFiles,
+  });
+
+  // Adiciona ao resultado final
+  fileKeys.forEach((key) => foundKeys.add(key));
+  fileNamespaces.forEach((ns) => namespaces.add(ns));
 
   if (!importedFiles.length) return;
 
@@ -203,6 +238,9 @@ async function scanFileRecursive(
 }
 
 export async function scan(entryFile: string): Promise<ScanResult> {
+  // Limpa o cache antes de cada scan para garantir resultados atualizados
+  // fileCache.clear();
+
   const foundKeys = new Set<string>();
   const namespaces = new Set<string>();
   await scanFileRecursive(entryFile, new Set<string>(), foundKeys, namespaces);
