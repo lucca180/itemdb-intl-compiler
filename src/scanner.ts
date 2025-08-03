@@ -13,6 +13,7 @@ import {
   isTemplateLiteral,
   SpreadElement,
 } from "@babel/types";
+import { readFile } from "node:fs/promises";
 
 import ts from "typescript";
 
@@ -175,7 +176,7 @@ function extractTCalls(
   });
 }
 
-function scanFileRecursive(
+async function scanFileRecursive(
   entry: string,
   visited: Set<string>,
   foundKeys: Set<string>,
@@ -185,20 +186,26 @@ function scanFileRecursive(
   if (visited.has(resolved)) return;
   visited.add(resolved);
 
-  const code = fs.readFileSync(resolved, "utf-8");
+  const code = await readFile(resolved, "utf-8");
   const importedFiles: string[] = [];
 
   extractTCalls(code, resolved, foundKeys, namespaces, importedFiles);
 
+  if (!importedFiles.length) return;
+
+  const promises: Promise<void>[] = [];
+
   for (const imp of importedFiles) {
-    scanFileRecursive(imp, visited, foundKeys, namespaces);
+    promises.push(scanFileRecursive(imp, visited, foundKeys, namespaces));
   }
+
+  await Promise.all(promises);
 }
 
 export async function scan(entryFile: string): Promise<ScanResult> {
   const foundKeys = new Set<string>();
   const namespaces = new Set<string>();
-  scanFileRecursive(entryFile, new Set<string>(), foundKeys, namespaces);
+  await scanFileRecursive(entryFile, new Set<string>(), foundKeys, namespaces);
 
   return {
     keys: Array.from(foundKeys),
@@ -236,36 +243,42 @@ export async function scanAllPagesInDir(
   const allKeys = new Set<string>();
   const allNamespaces = new Set<string>();
 
+  const promises = [];
+
   for (const file of pageFiles) {
-    const result = await scan(file);
+    const prom = scan(file).then((result) => {
+      if (
+        result.namespaces.length === 0 &&
+        result.keys.includes("[DYNAMIC_KEY]")
+      ) {
+        console.log(
+          `⚠️ Chave dinâmica sem nenhum namespace detectado em ${file}. Pulando.`
+        );
+        return;
+      }
 
-    if (
-      result.namespaces.length === 0 &&
-      result.keys.includes("[DYNAMIC_KEY]")
-    ) {
-      console.log(
-        `⚠️ Chave dinâmica sem nenhum namespace detectado em ${file}. Pulando.`
-      );
-      continue;
-    }
+      if (result.keys.includes("[IMPOSSIBLE_DYNAMIC_KEY]")) {
+        console.log(
+          `⚠️ Chave dinâmica impossível detectada em ${file}. Pulando.`
+        );
+        return;
+      }
 
-    if (result.keys.includes("[IMPOSSIBLE_DYNAMIC_KEY]")) {
-      console.log(
-        `⚠️ Chave dinâmica impossível detectada em ${file}. Pulando.`
-      );
-      continue;
-    }
+      if (result.keys.length === 0 && result.namespaces.length === 0) {
+        // console.log(`⚠️ Nenhuma chave encontrada em ${file}. Pulando.`);
+        return;
+      }
 
-    if (result.keys.length === 0 && result.namespaces.length === 0) {
-      // console.log(`⚠️ Nenhuma chave encontrada em ${file}. Pulando.`);
-      continue;
-    }
+      perPage[file] = result;
 
-    perPage[file] = result;
+      result.keys.forEach((k) => allKeys.add(k));
+      result.namespaces.forEach((ns) => allNamespaces.add(ns));
+    });
 
-    result.keys.forEach((k) => allKeys.add(k));
-    result.namespaces.forEach((ns) => allNamespaces.add(ns));
+    promises.push(prom);
   }
+
+  await Promise.all(promises);
 
   return {
     allKeys: Array.from(allKeys),
