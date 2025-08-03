@@ -16,8 +16,10 @@ program
   .option("-o, --output <dir>", "Diretório de saída para JSONs", "intl-pages")
   .action(
     async (dir: string, options: { output: string; tsconfig: string }) => {
+      const time = Date.now();
       const absoluteDir = path.resolve(dir);
       const outputDir = path.resolve(options.output);
+
       if (fs.existsSync(outputDir)) {
         fs.rmSync(outputDir, { recursive: true, force: true });
       }
@@ -51,8 +53,10 @@ program
 
         fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), "utf-8");
       }
-
-      console.log(`✅ Escaneamento completo! Resultado salvo em: ${outputDir}`);
+      const duration = Date.now() - time;
+      console.log(
+        `✅ Escaneamento completo em ${duration}ms. Resultado salvo em: ${outputDir}`
+      );
     }
   );
 
