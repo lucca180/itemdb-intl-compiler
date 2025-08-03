@@ -110,7 +110,9 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
                         for (const ns of namespaceGuess) {
                             namespaces.add(ns);
                         }
-                        console.log(`🔍 Chave dinâmica encontrada em ${fileInfo} - Namespace(s): ${namespaceGuess}`);
+                        // console.log(
+                        //   `🔍 Chave dinâmica encontrada em ${fileInfo} - Namespace(s): ${namespaceGuess}`
+                        // );
                         foundKeys.add("[DYNAMIC_KEY]");
                     }
                 }
