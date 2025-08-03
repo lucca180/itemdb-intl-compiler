@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import path from "path";
 import fs from "fs";
-import { scanAllPagesInDir } from "../src/scanner";
+import { scanAllPagesInDir } from "../src/scanner.js";
 
 const program = new Command();
 
