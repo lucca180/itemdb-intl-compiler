@@ -114,7 +114,7 @@ async function resolveImportPath(
   return null;
 }
 
-function extractTCalls(
+async function extractTCalls(
   code: string,
   filename: string,
   foundKeys: Set<string>,
@@ -127,15 +127,20 @@ function extractTCalls(
   });
 
   const dirname = path.dirname(filename);
+  const prom: Promise<void>[] = [];
 
   transverseDefault(ast, {
-    async ImportDeclaration(path) {
+    ImportDeclaration(path) {
       const importPath = path.node.source.value;
       if (!importPath.startsWith(".") && !importPath.startsWith("@")) return;
-      const resolved = await resolveWithAlias(importPath, dirname);
-      if (resolved) importedFiles.push(resolved);
+
+      prom.push(
+        resolveWithAlias(importPath, dirname).then((resolved) => {
+          if (resolved) importedFiles.push(resolved);
+        })
+      );
     },
-    async CallExpression(path) {
+    CallExpression(path) {
       const callee = path.get("callee");
 
       // next/dynamic call
@@ -155,8 +160,11 @@ function extractTCalls(
 
           if (importArg.type === "StringLiteral") {
             const importPath = importArg.value;
-            const resolved = await resolveWithAlias(importPath, dirname);
-            if (resolved) importedFiles.push(resolved);
+            prom.push(
+              resolveWithAlias(importPath, dirname).then((resolved) => {
+                if (resolved) importedFiles.push(resolved);
+              })
+            );
           }
         }
       }
@@ -200,6 +208,8 @@ function extractTCalls(
       }
     },
   });
+
+  await Promise.all(prom);
 }
 
 // Cache global para armazenar resultados de arquivos já processados
