@@ -11,7 +11,7 @@ program
     .option("-t, --tsconfig <tsconfig>", "Caminho para o root do tsconfig")
     .option("-o, --output <dir>", "Diretório de saída para JSONs", "intl-pages")
     .option("-w, --workers <number>", "Número de worker threads a usar (padrão: número de CPUs)")
-    .option("--sequential", "Usa processamento sequencial ao invés de worker threads")
+    .option("-s, --sequential", "Usa processamento sequencial ao invés de worker threads")
     .action(async (dir, options) => {
     const time = Date.now();
     const absoluteDir = path.resolve(dir);
@@ -45,6 +45,6 @@ program
         fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), "utf-8");
     }
     const duration = Date.now() - time;
-    console.log(`✅ Escaneamento completo em ${duration}ms. Resultado salvo em: ${outputDir}`);
+    console.log(`✅ Scan complete in ${duration}ms. Result saved to: ${outputDir}`);
 });
 program.parse();

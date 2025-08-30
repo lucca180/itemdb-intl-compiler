@@ -22,7 +22,7 @@ program
     "Número de worker threads a usar (padrão: número de CPUs)"
   )
   .option(
-    "--sequential",
+    "-s, --sequential",
     "Usa processamento sequencial ao invés de worker threads"
   )
   .action(
@@ -90,7 +90,7 @@ program
       }
       const duration = Date.now() - time;
       console.log(
-        `✅ Escaneamento completo em ${duration}ms. Resultado salvo em: ${outputDir}`
+        `✅ Scan complete in ${duration}ms. Result saved to: ${outputDir}`
       );
     }
   );
