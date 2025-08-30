@@ -4,6 +4,7 @@ import parser from "@babel/parser";
 import traverse from "@babel/traverse";
 import { isBinaryExpression, isConditionalExpression, isStringLiteral, isTemplateLiteral, } from "@babel/types";
 import { readFile, stat } from "node:fs/promises";
+import { WorkerPool } from "./worker-pool.js";
 import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default;
@@ -250,6 +251,62 @@ export async function scanAllPagesInDir(dir, tsConfig) {
         allNamespaces: Array.from(allNamespaces),
         perPage,
     };
+}
+export async function scanAllPagesInDirWithWorkers(dir, tsConfig, maxWorkers) {
+    tsConfig && loadAliasFromTSConfig(tsConfig);
+    const pageFiles = await findPages(dir);
+    const perPage = {};
+    const allKeys = new Set();
+    const allNamespaces = new Set();
+    if (pageFiles.length === 0) {
+        return {
+            allKeys: [],
+            allNamespaces: [],
+            perPage: {},
+        };
+    }
+    const workerPool = new WorkerPool(maxWorkers);
+    try {
+        // Create tasks for worker threads
+        const tasks = pageFiles.map((file, index) => ({
+            filePath: file,
+            taskId: `task_${index}`,
+        }));
+        console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || 'default'} worker threads...`);
+        const startTime = Date.now();
+        // Process all files with worker threads
+        const results = await workerPool.processTasks(tasks);
+        const processingTime = Date.now() - startTime;
+        console.log(`⚡ File processing completed in ${processingTime}ms`);
+        // Aggregate results
+        let processedFiles = 0;
+        let skippedFiles = 0;
+        for (const [taskId, workerResult] of results) {
+            if (workerResult.error) {
+                if (!workerResult.error.includes('No keys found')) {
+                    console.log(`⚠️ ${workerResult.error} em ${workerResult.filePath}. Pulando.`);
+                }
+                skippedFiles++;
+                continue;
+            }
+            if (workerResult.result) {
+                perPage[workerResult.filePath] = workerResult.result;
+                workerResult.result.keys.forEach((k) => allKeys.add(k));
+                workerResult.result.namespaces.forEach((ns) => allNamespaces.add(ns));
+                processedFiles++;
+            }
+        }
+        console.log(`📊 Processed: ${processedFiles} files, Skipped: ${skippedFiles} files`);
+        return {
+            allKeys: Array.from(allKeys),
+            allNamespaces: Array.from(allNamespaces),
+            perPage,
+        };
+    }
+    finally {
+        // Always terminate worker pool
+        await workerPool.terminate();
+    }
 }
 export function isTranslationCall(path) {
     const callee = path.get("callee");

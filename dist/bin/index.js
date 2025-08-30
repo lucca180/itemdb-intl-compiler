@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import path from "path";
 import fs from "fs";
-import { scanAllPagesInDir } from "../src/scanner.js";
+import { scanAllPagesInDir, scanAllPagesInDirWithWorkers } from "../src/scanner.js";
 const program = new Command();
 program
     .name("intl-scan")
@@ -10,6 +10,8 @@ program
     .argument("<dir>", "Diretório com principal")
     .option("-t, --tsconfig <tsconfig>", "Caminho para o root do tsconfig")
     .option("-o, --output <dir>", "Diretório de saída para JSONs", "intl-pages")
+    .option("-w, --workers <number>", "Número de worker threads a usar (padrão: número de CPUs)")
+    .option("--sequential", "Usa processamento sequencial ao invés de worker threads")
     .action(async (dir, options) => {
     const time = Date.now();
     const absoluteDir = path.resolve(dir);
@@ -21,7 +23,17 @@ program
     const tsconfigPath = options.tsconfig
         ? path.resolve(options.tsconfig)
         : undefined;
-    const result = await scanAllPagesInDir(absoluteDir, tsconfigPath);
+    let result;
+    const useWorkers = !options.sequential;
+    const workerCount = options.workers ? parseInt(options.workers) : undefined;
+    if (useWorkers) {
+        console.log("🚀 Using worker threads for parallel processing...");
+        result = await scanAllPagesInDirWithWorkers(absoluteDir, tsconfigPath, workerCount);
+    }
+    else {
+        console.log("📝 Using sequential processing...");
+        result = await scanAllPagesInDir(absoluteDir, tsconfigPath);
+    }
     fs.writeFileSync(path.join(outputDir, "all-keys.json"), JSON.stringify({ keys: result.allKeys, namespaces: result.allNamespaces }, null, 2), "utf-8");
     for (const [pagePath, data] of Object.entries(result.perPage)) {
         const relativePath = path.relative(absoluteDir, pagePath);
