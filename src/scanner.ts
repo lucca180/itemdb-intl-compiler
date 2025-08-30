@@ -407,7 +407,11 @@ export async function scanAllPagesInDirWithWorkers(
       taskId: `task_${index}`,
     }));
 
-    console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || 'default'} worker threads...`);
+    console.log(
+      `🚀 Scanning ${pageFiles.length} files using ${
+        maxWorkers || "default"
+      } worker threads...`
+    );
     const startTime = Date.now();
 
     // Process all files with worker threads
@@ -422,9 +426,11 @@ export async function scanAllPagesInDirWithWorkers(
 
     for (const [taskId, workerResult] of results) {
       if (workerResult.error) {
-        if (!workerResult.error.includes('No keys found')) {
-          console.log(`⚠️ ${workerResult.error} em ${workerResult.filePath}. Pulando.`);
-        }
+        // if (!workerResult.error.includes("No keys found")) {
+        console.log(
+          `⚠️ ${workerResult.error} em ${workerResult.filePath}. Pulando.`
+        );
+        // }
         skippedFiles++;
         continue;
       }
@@ -437,7 +443,9 @@ export async function scanAllPagesInDirWithWorkers(
       }
     }
 
-    console.log(`📊 Processed: ${processedFiles} files, Skipped: ${skippedFiles} files`);
+    console.log(
+      `📊 Processed: ${processedFiles} files, Skipped: ${skippedFiles} files`
+    );
 
     return {
       allKeys: Array.from(allKeys),

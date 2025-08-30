@@ -272,7 +272,7 @@ export async function scanAllPagesInDirWithWorkers(dir, tsConfig, maxWorkers) {
             filePath: file,
             taskId: `task_${index}`,
         }));
-        console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || 'default'} worker threads...`);
+        console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || "default"} worker threads...`);
         const startTime = Date.now();
         // Process all files with worker threads
         const results = await workerPool.processTasks(tasks);
@@ -283,9 +283,9 @@ export async function scanAllPagesInDirWithWorkers(dir, tsConfig, maxWorkers) {
         let skippedFiles = 0;
         for (const [taskId, workerResult] of results) {
             if (workerResult.error) {
-                if (!workerResult.error.includes('No keys found')) {
-                    console.log(`⚠️ ${workerResult.error} em ${workerResult.filePath}. Pulando.`);
-                }
+                // if (!workerResult.error.includes("No keys found")) {
+                console.log(`⚠️ ${workerResult.error} em ${workerResult.filePath}. Pulando.`);
+                // }
                 skippedFiles++;
                 continue;
             }

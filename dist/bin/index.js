@@ -2,7 +2,7 @@
 import { Command } from "commander";
 import path from "path";
 import fs from "fs";
-import { scanAllPagesInDir, scanAllPagesInDirWithWorkers } from "../src/scanner.js";
+import { scanAllPagesInDir, scanAllPagesInDirWithWorkers, } from "../src/scanner.js";
 const program = new Command();
 program
     .name("intl-scan")
@@ -25,7 +25,9 @@ program
         : undefined;
     let result;
     const useWorkers = !options.sequential;
-    const workerCount = options.workers ? parseInt(options.workers) : undefined;
+    const workerCount = options.workers
+        ? parseInt(options.workers)
+        : undefined;
     if (useWorkers) {
         console.log("🚀 Using worker threads for parallel processing...");
         result = await scanAllPagesInDirWithWorkers(absoluteDir, tsconfigPath, workerCount);

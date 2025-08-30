@@ -1,5 +1,5 @@
-import { parentPort } from 'worker_threads';
-import { scan } from './scanner.js';
+import { parentPort } from "worker_threads";
+import { scan } from "./scanner.js";
 async function processFile(task) {
     try {
         const result = await scan(task.filePath);
@@ -10,7 +10,7 @@ async function processFile(task) {
                 taskId: task.taskId,
                 filePath: task.filePath,
                 result: null,
-                error: 'Dynamic key without namespace detected'
+                error: "Dynamic key without namespace detected",
             };
         }
         if (result.keys.includes("[IMPOSSIBLE_DYNAMIC_KEY]")) {
@@ -18,7 +18,7 @@ async function processFile(task) {
                 taskId: task.taskId,
                 filePath: task.filePath,
                 result: null,
-                error: 'Impossible dynamic key detected'
+                error: "Impossible dynamic key detected",
             };
         }
         if (result.keys.length === 0 && result.namespaces.length === 0) {
@@ -26,13 +26,13 @@ async function processFile(task) {
                 taskId: task.taskId,
                 filePath: task.filePath,
                 result: null,
-                error: 'No keys found'
+                error: "No keys found",
             };
         }
         return {
             taskId: task.taskId,
             filePath: task.filePath,
-            result
+            result,
         };
     }
     catch (error) {
@@ -40,13 +40,13 @@ async function processFile(task) {
             taskId: task.taskId,
             filePath: task.filePath,
             result: null,
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
         };
     }
 }
 // Listen for messages from main thread
 if (parentPort) {
-    parentPort.on('message', async (task) => {
+    parentPort.on("message", async (task) => {
         const result = await processFile(task);
         parentPort.postMessage(result);
     });

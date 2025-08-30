@@ -2,7 +2,10 @@
 import { Command } from "commander";
 import path from "path";
 import fs from "fs";
-import { scanAllPagesInDir, scanAllPagesInDirWithWorkers } from "../src/scanner.js";
+import {
+  scanAllPagesInDir,
+  scanAllPagesInDirWithWorkers,
+} from "../src/scanner.js";
 
 const program = new Command();
 
@@ -14,15 +17,24 @@ program
   .argument("<dir>", "Diretório com principal")
   .option("-t, --tsconfig <tsconfig>", "Caminho para o root do tsconfig")
   .option("-o, --output <dir>", "Diretório de saída para JSONs", "intl-pages")
-  .option("-w, --workers <number>", "Número de worker threads a usar (padrão: número de CPUs)")
-  .option("--sequential", "Usa processamento sequencial ao invés de worker threads")
+  .option(
+    "-w, --workers <number>",
+    "Número de worker threads a usar (padrão: número de CPUs)"
+  )
+  .option(
+    "--sequential",
+    "Usa processamento sequencial ao invés de worker threads"
+  )
   .action(
-    async (dir: string, options: { 
-      output: string; 
-      tsconfig: string; 
-      workers: string;
-      sequential: boolean;
-    }) => {
+    async (
+      dir: string,
+      options: {
+        output: string;
+        tsconfig: string;
+        workers: string;
+        sequential: boolean;
+      }
+    ) => {
       const time = Date.now();
       const absoluteDir = path.resolve(dir);
       const outputDir = path.resolve(options.output);
@@ -38,11 +50,17 @@ program
 
       let result;
       const useWorkers = !options.sequential;
-      const workerCount = options.workers ? parseInt(options.workers) : undefined;
+      const workerCount = options.workers
+        ? parseInt(options.workers)
+        : undefined;
 
       if (useWorkers) {
         console.log("🚀 Using worker threads for parallel processing...");
-        result = await scanAllPagesInDirWithWorkers(absoluteDir, tsconfigPath, workerCount);
+        result = await scanAllPagesInDirWithWorkers(
+          absoluteDir,
+          tsconfigPath,
+          workerCount
+        );
       } else {
         console.log("📝 Using sequential processing...");
         result = await scanAllPagesInDir(absoluteDir, tsconfigPath);

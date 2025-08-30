@@ -1,5 +1,5 @@
-import { parentPort, workerData } from 'worker_threads';
-import { scan } from './scanner.js';
+import { parentPort, workerData } from "worker_threads";
+import { scan } from "./scanner.js";
 
 export interface WorkerTask {
   filePath: string;
@@ -19,7 +19,7 @@ export interface WorkerResult {
 async function processFile(task: WorkerTask): Promise<WorkerResult> {
   try {
     const result = await scan(task.filePath);
-    
+
     // Skip files with problematic patterns
     if (
       result.namespaces.length === 0 &&
@@ -29,7 +29,7 @@ async function processFile(task: WorkerTask): Promise<WorkerResult> {
         taskId: task.taskId,
         filePath: task.filePath,
         result: null,
-        error: 'Dynamic key without namespace detected'
+        error: "Dynamic key without namespace detected",
       };
     }
 
@@ -38,7 +38,7 @@ async function processFile(task: WorkerTask): Promise<WorkerResult> {
         taskId: task.taskId,
         filePath: task.filePath,
         result: null,
-        error: 'Impossible dynamic key detected'
+        error: "Impossible dynamic key detected",
       };
     }
 
@@ -47,28 +47,28 @@ async function processFile(task: WorkerTask): Promise<WorkerResult> {
         taskId: task.taskId,
         filePath: task.filePath,
         result: null,
-        error: 'No keys found'
+        error: "No keys found",
       };
     }
 
     return {
       taskId: task.taskId,
       filePath: task.filePath,
-      result
+      result,
     };
   } catch (error) {
     return {
       taskId: task.taskId,
       filePath: task.filePath,
       result: null,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
 
 // Listen for messages from main thread
 if (parentPort) {
-  parentPort.on('message', async (task: WorkerTask) => {
+  parentPort.on("message", async (task: WorkerTask) => {
     const result = await processFile(task);
     parentPort!.postMessage(result);
   });

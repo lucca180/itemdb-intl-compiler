@@ -1,7 +1,7 @@
-import { Worker } from 'worker_threads';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import os from 'os';
+import { Worker } from "worker_threads";
+import path from "path";
+import { fileURLToPath } from "url";
+import os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,22 +32,22 @@ export class WorkerPool {
   constructor(private maxWorkers = os.cpus().length) {}
 
   private createWorker(): Worker {
-    const workerPath = path.join(__dirname, 'scanner-worker.js');
+    const workerPath = path.join(__dirname, "scanner-worker.js");
     const worker = new Worker(workerPath);
 
-    worker.on('message', (result: WorkerResult) => {
+    worker.on("message", (result: WorkerResult) => {
       this.results.set(result.taskId, result);
       this.activeWorkers--;
       this.processNextTask();
     });
 
-    worker.on('error', (error) => {
-      console.error('Worker error:', error);
+    worker.on("error", (error) => {
+      console.error("Worker error:", error);
       this.activeWorkers--;
       this.processNextTask();
     });
 
-    worker.on('exit', (code) => {
+    worker.on("exit", (code) => {
       if (code !== 0) {
         console.error(`Worker stopped with exit code ${code}`);
       }
@@ -105,8 +105,6 @@ export class WorkerPool {
   }
 
   async terminate(): Promise<void> {
-    await Promise.all(
-      this.workers.map(worker => worker.terminate())
-    );
+    await Promise.all(this.workers.map((worker) => worker.terminate()));
   }
 }
