@@ -5,6 +5,7 @@ import traverse from "@babel/traverse";
 import { isBinaryExpression, isConditionalExpression, isStringLiteral, isTemplateLiteral, } from "@babel/types";
 import { readFile, stat } from "node:fs/promises";
 import { WorkerPool } from "./worker-pool.js";
+import os from "os";
 import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default;
@@ -274,7 +275,7 @@ export async function scanAllPagesInDirWithWorkers(dir, tsConfig, maxWorkers) {
             filePath: file,
             taskId: `task_${index}`,
         }));
-        console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || "default"} worker threads...`);
+        console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || os.availableParallelism()} worker threads...`);
         const startTime = Date.now();
         // Process all files with worker threads
         const results = await workerPool.processTasks(tasks);

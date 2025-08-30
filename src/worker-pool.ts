@@ -29,7 +29,7 @@ export class WorkerPool {
   private resolvePromise?: (value: Map<string, WorkerResult>) => void;
   private rejectPromise?: (error: Error) => void;
 
-  constructor(private maxWorkers = os.cpus().length) {}
+  constructor(private maxWorkers = os.availableParallelism()) {}
 
   private createWorker(): Worker {
     const workerPath = path.join(__dirname, "scanner-worker.js");

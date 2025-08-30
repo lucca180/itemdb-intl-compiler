@@ -15,6 +15,7 @@ import {
 } from "@babel/types";
 import { readFile, stat } from "node:fs/promises";
 import { WorkerPool, WorkerTask, WorkerResult } from "./worker-pool.js";
+import os from "os";
 
 import ts from "typescript";
 
@@ -411,7 +412,7 @@ export async function scanAllPagesInDirWithWorkers(
 
     console.log(
       `🚀 Scanning ${pageFiles.length} files using ${
-        maxWorkers || "default"
+        maxWorkers || os.availableParallelism()
       } worker threads...`
     );
     const startTime = Date.now();

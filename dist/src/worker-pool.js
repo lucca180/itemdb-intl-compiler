@@ -5,7 +5,7 @@ import os from "os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export class WorkerPool {
-    constructor(maxWorkers = os.cpus().length) {
+    constructor(maxWorkers = os.availableParallelism()) {
         this.maxWorkers = maxWorkers;
         this.workers = [];
         this.taskQueue = [];
