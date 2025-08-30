@@ -245,7 +245,7 @@ async function scanFileRecursive(
   const fileKeys = new Set<string>();
   const fileNamespaces = new Set<string>();
 
-  extractTCalls(code, resolved, fileKeys, fileNamespaces, importedFiles);
+  await extractTCalls(code, resolved, fileKeys, fileNamespaces, importedFiles);
 
   fileCache.set(resolved, {
     keys: fileKeys,
