@@ -70,22 +70,24 @@ async function resolveImportPath(importPath, baseDir) {
     }
     return null;
 }
-function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
+async function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
     const ast = parser.parse(code, {
         sourceType: "module",
         plugins: ["typescript", "jsx"],
     });
     const dirname = path.dirname(filename);
+    const prom = [];
     transverseDefault(ast, {
-        async ImportDeclaration(path) {
+        ImportDeclaration(path) {
             const importPath = path.node.source.value;
             if (!importPath.startsWith(".") && !importPath.startsWith("@"))
                 return;
-            const resolved = await resolveWithAlias(importPath, dirname);
-            if (resolved)
-                importedFiles.push(resolved);
+            prom.push(resolveWithAlias(importPath, dirname).then((resolved) => {
+                if (resolved)
+                    importedFiles.push(resolved);
+            }));
         },
-        async CallExpression(path) {
+        CallExpression(path) {
             const callee = path.get("callee");
             // next/dynamic call
             if (callee.isIdentifier() &&
@@ -98,9 +100,10 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
                     const importArg = arg.body.arguments[0];
                     if (importArg.type === "StringLiteral") {
                         const importPath = importArg.value;
-                        const resolved = await resolveWithAlias(importPath, dirname);
-                        if (resolved)
-                            importedFiles.push(resolved);
+                        prom.push(resolveWithAlias(importPath, dirname).then((resolved) => {
+                            if (resolved)
+                                importedFiles.push(resolved);
+                        }));
                     }
                 }
             }
@@ -138,6 +141,7 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
             }
         },
     });
+    await Promise.all(prom);
 }
 // Cache global para armazenar resultados de arquivos já processados
 const fileCache = new Map();
