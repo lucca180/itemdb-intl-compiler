@@ -196,6 +196,7 @@ function shouldScanFile(filePath) {
         /\.test\./,
         /\.spec\./,
         /\.stories\./,
+        /\/pages\/api/,
     ];
     return !skipPatterns.some((pattern) => pattern.test(filePath));
 }
