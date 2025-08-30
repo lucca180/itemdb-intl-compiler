@@ -3,7 +3,7 @@ import path from "path";
 import parser from "@babel/parser";
 import traverse from "@babel/traverse";
 import { isBinaryExpression, isConditionalExpression, isStringLiteral, isTemplateLiteral, } from "@babel/types";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default;
@@ -25,7 +25,7 @@ function loadAliasFromTSConfig(projectRoot) {
         }
     }
 }
-function resolveWithAlias(importPath, baseDir) {
+async function resolveWithAlias(importPath, baseDir) {
     if (importPath.startsWith(".")) {
         return resolveImportPath(importPath, baseDir);
     }
@@ -37,17 +37,35 @@ function resolveWithAlias(importPath, baseDir) {
     }
     return null;
 }
-function resolveImportPath(importPath, baseDir) {
+// Cache for file existence checks
+const fileExistsCache = new Map();
+async function fileExists(filePath) {
+    if (fileExistsCache.has(filePath)) {
+        return fileExistsCache.get(filePath);
+    }
+    try {
+        await stat(filePath);
+        fileExistsCache.set(filePath, true);
+        return true;
+    }
+    catch {
+        fileExistsCache.set(filePath, false);
+        return false;
+    }
+}
+async function resolveImportPath(importPath, baseDir) {
     const fullPath = path.resolve(baseDir, importPath);
     const extensions = [".ts", ".tsx", ".js", ".jsx"];
+    // Check direct file matches first
     for (const ext of extensions) {
         const tryPath = fullPath + ext;
-        if (fs.existsSync(tryPath))
+        if (await fileExists(tryPath))
             return tryPath;
     }
+    // Check index files
     for (const ext of extensions) {
         const tryPath = path.join(fullPath, "index" + ext);
-        if (fs.existsSync(tryPath))
+        if (await fileExists(tryPath))
             return tryPath;
     }
     return null;
@@ -59,15 +77,15 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
     });
     const dirname = path.dirname(filename);
     transverseDefault(ast, {
-        ImportDeclaration(path) {
+        async ImportDeclaration(path) {
             const importPath = path.node.source.value;
             if (!importPath.startsWith(".") && !importPath.startsWith("@"))
                 return;
-            const resolved = resolveWithAlias(importPath, dirname);
+            const resolved = await resolveWithAlias(importPath, dirname);
             if (resolved)
                 importedFiles.push(resolved);
         },
-        CallExpression(path) {
+        async CallExpression(path) {
             const callee = path.get("callee");
             // next/dynamic call
             if (callee.isIdentifier() &&
@@ -80,7 +98,7 @@ function extractTCalls(code, filename, foundKeys, namespaces, importedFiles) {
                     const importArg = arg.body.arguments[0];
                     if (importArg.type === "StringLiteral") {
                         const importPath = importArg.value;
-                        const resolved = resolveWithAlias(importPath, dirname);
+                        const resolved = await resolveWithAlias(importPath, dirname);
                         if (resolved)
                             importedFiles.push(resolved);
                     }
@@ -128,18 +146,11 @@ async function scanFileRecursive(entry, visited, foundKeys, namespaces) {
     if (visited.has(resolved))
         return;
     visited.add(resolved);
-    // Verifica se o arquivo já foi processado globalmente
     if (fileCache.has(resolved)) {
         const cached = fileCache.get(resolved);
-        // Adiciona os resultados do cache ao resultado final
         cached.keys.forEach((key) => foundKeys.add(key));
         cached.namespaces.forEach((ns) => namespaces.add(ns));
-        // Continua processando os arquivos importados se ainda não foram visitados nesta branch
-        const promises = [];
-        for (const imp of cached.importedFiles) {
-            promises.push(scanFileRecursive(imp, visited, foundKeys, namespaces));
-        }
-        await Promise.all(promises);
+        await Promise.all(cached.importedFiles.map((imp) => scanFileRecursive(imp, visited, foundKeys, namespaces)));
         return;
     }
     const code = await readFile(resolved, "utf-8");
@@ -147,22 +158,14 @@ async function scanFileRecursive(entry, visited, foundKeys, namespaces) {
     const fileKeys = new Set();
     const fileNamespaces = new Set();
     extractTCalls(code, resolved, fileKeys, fileNamespaces, importedFiles);
-    // Armazena no cache global
     fileCache.set(resolved, {
         keys: fileKeys,
         namespaces: fileNamespaces,
         importedFiles,
     });
-    // Adiciona ao resultado final
     fileKeys.forEach((key) => foundKeys.add(key));
     fileNamespaces.forEach((ns) => namespaces.add(ns));
-    if (!importedFiles.length)
-        return;
-    const promises = [];
-    for (const imp of importedFiles) {
-        promises.push(scanFileRecursive(imp, visited, foundKeys, namespaces));
-    }
-    await Promise.all(promises);
+    await Promise.all(importedFiles.map((imp) => scanFileRecursive(imp, visited, foundKeys, namespaces)));
 }
 export async function scan(entryFile) {
     // Limpa o cache antes de cada scan para garantir resultados atualizados
@@ -175,23 +178,43 @@ export async function scan(entryFile) {
         namespaces: Array.from(namespaces),
     };
 }
-function findPages(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+function shouldScanFile(filePath) {
+    // Skip common non-source directories
+    const skipPatterns = [
+        /node_modules/,
+        /\.next/,
+        /dist/,
+        /build/,
+        /coverage/,
+        /\.git/,
+        /\.d\.ts$/,
+        /\.test\./,
+        /\.spec\./,
+        /\.stories\./,
+    ];
+    return !skipPatterns.some((pattern) => pattern.test(filePath));
+}
+async function findPages(dir) {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
     const files = [];
-    for (const entry of entries) {
+    const tasks = entries.map(async (entry) => {
         const fullPath = path.join(dir, entry.name);
+        if (!shouldScanFile(fullPath))
+            return;
         if (entry.isDirectory()) {
-            files.push(...findPages(fullPath));
+            const subFiles = await findPages(fullPath);
+            files.push(...subFiles);
         }
         else if (/\.(ts|tsx|js|jsx)$/.test(entry.name)) {
             files.push(fullPath);
         }
-    }
+    });
+    await Promise.all(tasks);
     return files;
 }
 export async function scanAllPagesInDir(dir, tsConfig) {
     tsConfig && loadAliasFromTSConfig(tsConfig);
-    const pageFiles = findPages(dir);
+    const pageFiles = await findPages(dir);
     const perPage = {};
     const allKeys = new Set();
     const allNamespaces = new Set();
