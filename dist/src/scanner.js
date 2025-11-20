@@ -23,7 +23,6 @@ function loadAliasFromTSConfig(projectRoot) {
             const target = paths[0].replace(/\*$/, "");
             if (cleanPattern === "@prisma/generated/")
                 continue;
-            console.log(`Loaded alias from tsconfig: ${cleanPattern} -> ${target}`, aliasMap);
             aliasMap[cleanPattern] = path.resolve(config.options.baseUrl || projectRoot, target);
         }
     }
@@ -35,7 +34,6 @@ async function resolveWithAlias(importPath, baseDir) {
     for (const alias in aliasMap) {
         if (importPath.startsWith(alias)) {
             const relativePath = importPath.replace(alias, aliasMap[alias] + "/");
-            console.log(`Resolving alias: ${alias} -> ${aliasMap[alias]}, importPath: ${importPath}, relativePath: ${relativePath}`);
             return resolveImportPath(relativePath, baseDir);
         }
     }
