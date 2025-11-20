@@ -2,7 +2,7 @@ import { parentPort } from "worker_threads";
 import { scan } from "./scanner.js";
 async function processFile(task) {
     try {
-        const result = await scan(task.filePath);
+        const result = await scan(task.filePath, task.aliasMap);
         // Skip files with problematic patterns
         if (result.namespaces.length === 0 &&
             result.keys.includes("[DYNAMIC_KEY]")) {

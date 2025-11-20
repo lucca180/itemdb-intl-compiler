@@ -14,7 +14,8 @@ import {
   SpreadElement,
 } from "@babel/types";
 import { readFile, stat } from "node:fs/promises";
-import { WorkerPool, WorkerTask, WorkerResult } from "./worker-pool.js";
+import { WorkerPool } from "./worker-pool.js";
+import type { WorkerTask } from "./scanner-worker.js";
 import os from "os";
 
 import ts from "typescript";
@@ -22,7 +23,7 @@ import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default! as typeof traverse;
 
-const aliasMap: Record<string, string> = {};
+let aliasMap: Record<string, string> = {};
 
 function loadAliasFromTSConfig(projectRoot: string) {
   const configPath =
@@ -265,9 +266,16 @@ async function scanFileRecursive(
   );
 }
 
-export async function scan(entryFile: string): Promise<ScanResult> {
+export async function scan(
+  entryFile: string,
+  aliasMapNew?: Record<string, string>
+): Promise<ScanResult> {
   // Limpa o cache antes de cada scan para garantir resultados atualizados
   // fileCache.clear();
+
+  if ((!aliasMap || Object.keys(aliasMap).length === 0) && aliasMapNew) {
+    aliasMap = aliasMapNew;
+  }
 
   const foundKeys = new Set<string>();
   const namespaces = new Set<string>();
@@ -407,6 +415,7 @@ export async function scanAllPagesInDirWithWorkers(
     // Create tasks for worker threads
     const tasks: WorkerTask[] = pageFiles.map((file, index) => ({
       filePath: file,
+      aliasMap,
       taskId: `task_${index}`,
     }));
 

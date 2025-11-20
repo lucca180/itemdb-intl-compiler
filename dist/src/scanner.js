@@ -9,7 +9,7 @@ import os from "os";
 import ts from "typescript";
 // @ts-expect-error ts error
 const transverseDefault = traverse.default;
-const aliasMap = {};
+let aliasMap = {};
 function loadAliasFromTSConfig(projectRoot) {
     const configPath = ts.findConfigFile(projectRoot, ts.sys.fileExists, "tsconfig.json") ||
         ts.findConfigFile(projectRoot, ts.sys.fileExists, "jsconfig.json");
@@ -23,6 +23,7 @@ function loadAliasFromTSConfig(projectRoot) {
             const target = paths[0].replace(/\*$/, "");
             if (cleanPattern === "@prisma/generated/")
                 continue;
+            console.log(`Loaded alias from tsconfig: ${cleanPattern} -> ${target}`, aliasMap);
             aliasMap[cleanPattern] = path.resolve(config.options.baseUrl || projectRoot, target);
         }
     }
@@ -34,6 +35,7 @@ async function resolveWithAlias(importPath, baseDir) {
     for (const alias in aliasMap) {
         if (importPath.startsWith(alias)) {
             const relativePath = importPath.replace(alias, aliasMap[alias] + "/");
+            console.log(`Resolving alias: ${alias} -> ${aliasMap[alias]}, importPath: ${importPath}, relativePath: ${relativePath}`);
             return resolveImportPath(relativePath, baseDir);
         }
     }
@@ -173,9 +175,12 @@ async function scanFileRecursive(entry, visited, foundKeys, namespaces) {
     fileNamespaces.forEach((ns) => namespaces.add(ns));
     await Promise.all(importedFiles.map((imp) => scanFileRecursive(imp, visited, foundKeys, namespaces)));
 }
-export async function scan(entryFile) {
+export async function scan(entryFile, aliasMapNew) {
     // Limpa o cache antes de cada scan para garantir resultados atualizados
     // fileCache.clear();
+    if ((!aliasMap || Object.keys(aliasMap).length === 0) && aliasMapNew) {
+        aliasMap = aliasMapNew;
+    }
     const foundKeys = new Set();
     const namespaces = new Set();
     await scanFileRecursive(entryFile, new Set(), foundKeys, namespaces);
@@ -273,6 +278,7 @@ export async function scanAllPagesInDirWithWorkers(dir, tsConfig, maxWorkers) {
         // Create tasks for worker threads
         const tasks = pageFiles.map((file, index) => ({
             filePath: file,
+            aliasMap,
             taskId: `task_${index}`,
         }));
         console.log(`🚀 Scanning ${pageFiles.length} files using ${maxWorkers || os.availableParallelism()} worker threads...`);

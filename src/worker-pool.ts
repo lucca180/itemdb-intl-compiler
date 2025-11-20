@@ -3,23 +3,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import os from "os";
 
+import type { WorkerTask, WorkerResult } from "./scanner-worker.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-export interface WorkerTask {
-  filePath: string;
-  taskId: string;
-}
-
-export interface WorkerResult {
-  taskId: string;
-  filePath: string;
-  result: {
-    keys: string[];
-    namespaces: string[];
-  } | null;
-  error?: string;
-}
 
 export class WorkerPool {
   private workers: Worker[] = [];

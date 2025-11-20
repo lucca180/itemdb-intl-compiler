@@ -3,6 +3,7 @@ import { scan } from "./scanner.js";
 
 export interface WorkerTask {
   filePath: string;
+  aliasMap: Record<string, string>;
   taskId: string;
 }
 
@@ -18,7 +19,7 @@ export interface WorkerResult {
 
 async function processFile(task: WorkerTask): Promise<WorkerResult> {
   try {
-    const result = await scan(task.filePath);
+    const result = await scan(task.filePath, task.aliasMap);
 
     // Skip files with problematic patterns
     if (
